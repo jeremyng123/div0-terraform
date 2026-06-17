@@ -1,0 +1,3 @@
+[submodule "div0-homelab-stack"]
+	path = div0-homelab-stack
+	url = https://github.com/jeremyng123/div0-homelab-stack.git
