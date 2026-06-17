@@ -210,6 +210,10 @@ variable "deploy_version" {
 # Stack secrets -> rendered into per-stack .env files
 ###############################################################################
 
+### NOTE: password is used in plain string here. Exercise for div0:
+###         - is it a danger?
+###         - what can we do to avoid default passwords in our VCS?
+
 variable "grafana_admin_user" {
   description = "Grafana admin username (lgtm-stack)."
   type        = string
