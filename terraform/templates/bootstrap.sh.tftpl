@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# Managed by Terraform. Idempotent: safe to re-run on every apply.
+set -euo pipefail
+
+# Report the exact failing command/line instead of a bare "exited with status 1".
+trap 'rc=$?; echo ">> BOOTSTRAP FAILED at line $LINENO (exit $rc): $BASH_COMMAND" >&2; exit $rc' ERR
+
+STACKS_DIR="${stacks_dir}"
+DOCKGE_DIR="${dockge_dir}"
+TZ="${timezone}"
+DNS="${dns_servers}"
+
+echo ">> Setting timezone to $TZ"
+ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime || true
+echo "$TZ" > /etc/timezone || true
+
+# Pin nameservers and stop dhclient from overwriting resolv.conf on lease renewal.
+if [ -n "$DNS" ]; then
+  echo ">> Pinning DNS: $DNS"
+  if [ -d /etc/dhcp/dhclient-enter-hooks.d ]; then
+    cat > /etc/dhcp/dhclient-enter-hooks.d/nodnsupdate <<'HOOK'
+#!/bin/sh
+make_resolv_conf() { :; }
+HOOK
+    chmod +x /etc/dhcp/dhclient-enter-hooks.d/nodnsupdate
+  fi
+  : > /etc/resolv.conf
+  for s in $DNS; do echo "nameserver $s" >> /etc/resolv.conf; done
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+
+echo ">> Installing prerequisites (curl, ca-certificates)"
+apt-get update -qq
+apt-get install -y -qq ca-certificates curl gnupg
+
+echo ">> Ensuring Docker is installed"
+if ! command -v docker >/dev/null 2>&1; then
+  curl -fsSL https://get.docker.com | sh
+fi
+if ! command -v docker >/dev/null 2>&1; then
+  apt-get install -y -qq docker.io docker-compose-plugin
+fi
+systemctl enable --now docker || true
+
+echo ">> Ensuring external Docker networks exist"
+docker network inspect docker-socket-net >/dev/null 2>&1 || docker network create docker-socket-net
+docker network inspect observability    >/dev/null 2>&1 || docker network create observability
+
+echo ">> Deploying Dockge (stack manager) in $DOCKGE_DIR"
+( cd "$DOCKGE_DIR" && docker compose up -d )
+
+# Dependency order: the proxy serves the docker API its consumers use, technitium
+# must be up before the lgtm-stack exporter scrapes it, dozzle consumes the proxy.
+for stack in docker-socket-proxy technitium lgtm-stack dozzle; do
+  echo ">> Deploying stack: $stack"
+  if ! ( cd "$STACKS_DIR/$stack" && docker compose up -d ); then
+    echo ">> FAILED bringing up stack '$stack' (see 'docker compose' output above)" >&2
+    exit 1
+  fi
+done
+
+echo ">> Done. Running containers:"
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'

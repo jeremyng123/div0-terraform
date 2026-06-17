@@ -1,0 +1,14 @@
+# secrets that should not be shared
+.secrets
+/**/.ssh
+
+
+# Claude Code
+.claude/*.local.json
+.claude/**/*.log
+CLAUDE.local.md
+# .claude/
+
+# environment-specific folder containing environment variables used
+# by specific stack in dockge
+/**/.rendered
