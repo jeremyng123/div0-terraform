@@ -1,0 +1,62 @@
+###############################################################################
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+###############################################################################
+
+# --- Proxmox connection ---
+proxmox_endpoint = "https://192.168.1.10:8006/"
+proxmox_insecure = true
+
+# Auth: setting the keyctl feature flag requires root@pam username/password.
+# Use this (recommended for this project):
+proxmox_username = "root@pam"
+proxmox_password = "your-root-password"
+
+# ...OR an API token, but ONLY if you remove keyctl from main.tf (tokens can't
+# set feature flags other than nesting). Leave proxmox_password empty to use it:
+# proxmox_api_token = "root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# SSH on the Proxmox node (provider fallback). Either set the key or use an agent.
+proxmox_node_ssh_username    = "root"
+proxmox_node_ssh_private_key = <<-EOT
+-----BEGIN OPENSSH PRIVATE KEY-----
+...node key...
+-----END OPENSSH PRIVATE KEY-----
+EOT
+# proxmox_ssh_agent = true   # alternative to the key above
+
+# --- Fleet size ---
+# How many docker LXC containers to create (each runs Dockge + all stacks).
+instance_count = 2
+
+# --- Containers ---
+node_name = "pve"
+# vmid omitted on purpose: Proxmox auto-allocates free IDs. If you pin a base
+# vmid, instances use vmid, vmid+1, ... so keep that range free:
+# vmid             = 100
+container_template = "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+
+# Network: use DHCP when instance_count > 1 (a single static CIDR can't be shared).
+ipv4_address = "dhcp"
+
+# DNS for the containers (stock Debian template needs it set explicitly).
+# Defaults to 1.1.1.1/8.8.8.8; switch to your LAN resolver if public DNS is blocked.
+# container_dns_servers = ["192.168.70.2"]
+
+# Root password for the containers (console fallback).
+container_password = "change-me"
+
+# SSH key: by default Terraform reads ./.ssh/proxmox_homelab(.pub) and generates
+# an ed25519 keypair there on first apply if it's missing. The same key is
+# injected into every instance. No input needed.
+# To bring your own key, point these at it instead:
+# ssh_public_key_path  = "~/.ssh/id_ed25519.pub"
+# ssh_private_key_path = "~/.ssh/id_ed25519"
+
+# If DHCP discovery is flaky, pin the address per instance (index 0 = docker-0):
+# container_ip_override = ["192.168.1.100", "192.168.1.101"]
+
+# --- Stack secrets (rendered into per-stack .env files) ---
+grafana_admin_user        = "admin"
+grafana_admin_password    = "change-me-grafana"
+technitium_admin_password = "change-me-technitium"
+technitium_api_token      = "change-me-technitium-api-token"
